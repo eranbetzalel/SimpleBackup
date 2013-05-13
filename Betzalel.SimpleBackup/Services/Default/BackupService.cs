@@ -173,10 +173,8 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
-      var filesToBackup = backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).AsEnumerable();
-
-      if (latestBackup.HasValue)
-        filesToBackup = filesToBackup.Where(f => f.LastWriteTime > latestBackup.Value);
+      var filesToBackup =
+        backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).Where(f => f.LastWriteTime > latestBackup);
 
       foreach (var fileToBackup in filesToBackup)
       {
