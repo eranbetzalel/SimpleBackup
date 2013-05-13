@@ -169,14 +169,14 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     private void AddFilesToDifferentialBackup(ZipFile backupFile, string pathToBackup)
     {
-      var latestFullBackup = _backupHistoryService.GetLatestFullBackupDate();
+      var latestBackup = _backupHistoryService.GetLatestBackupDate();
 
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
       var filesToBackup = backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).AsEnumerable();
 
-      if (latestFullBackup.HasValue)
-        filesToBackup = filesToBackup.Where(f => f.LastWriteTime > latestFullBackup.Value);
+      if (latestBackup.HasValue)
+        filesToBackup = filesToBackup.Where(f => f.LastWriteTime > latestBackup.Value);
 
       foreach (var fileToBackup in filesToBackup)
       {

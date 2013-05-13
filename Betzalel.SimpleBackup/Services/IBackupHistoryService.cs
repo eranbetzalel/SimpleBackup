@@ -4,6 +4,7 @@ namespace Betzalel.SimpleBackup.Services
 {
   public interface IBackupHistoryService
   {
+    DateTime? GetLatestBackupDate();
     DateTime? GetLatestFullBackupDate();
 
     void AddBackupHistoryEntry(

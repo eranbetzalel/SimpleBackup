@@ -42,6 +42,18 @@ namespace Betzalel.SimpleBackup.Services.Default
           .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("started").Value));
     }
 
+    public DateTime GetLatestBackupDate()
+    {
+      _backupFileStream.Seek(0, SeekOrigin.Begin);
+
+      var document = XDocument.Load(_backupFileStream);
+
+      return
+        document.Root
+          .Elements("Backup")
+          .Max(x => DateTime.Parse(x.NotNullAttribute("started").Value));
+    }
+
     public void AddBackupHistoryEntry(
       BackupHistoryType backupHistoryType, 
       DateTime started, 
