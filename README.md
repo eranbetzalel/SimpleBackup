@@ -7,7 +7,9 @@ A single run of the application will perform a single backup to each of the conf
 
 Configuration
 ---------
- * BackupPaths – comma delimited absolute path directories to backup.
+ * BackupPaths – comma delimited absolute path directories to backup. Example: C:\Test,C:\Test2.
+ * ExcludedBackupPaths – comma delimited absolute path directories to exclude from backup. Example: C:\Test\excludeThis,C:\Test\andExcludeThis.
+ * ExcludedFileTypes – comma delimited absolute path directories to backup. Example: exe,jpg,ini.
  * MinimumDaysBetweenFullBackups – the minimum amount of days before performing the next full backup.
  * FtpHost – the FTP server host or IP address.
  * FtpPort – the FTP server port.

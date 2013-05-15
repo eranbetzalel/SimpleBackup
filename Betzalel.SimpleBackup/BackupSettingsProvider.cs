@@ -7,12 +7,12 @@ namespace Betzalel.SimpleBackup
 {
   public class BackupSettingsProvider : AppSettingsProvider
   {
-    private readonly Dictionary<string, object> _backupConfiguration;
+    private readonly Dictionary<string, string> _backupConfiguration;
 
     public BackupSettingsProvider()
     {
       _backupConfiguration =
-        new Dictionary<string, object>
+        new Dictionary<string, string>
           {
             {"TempDirectory", PathUtil.MapToExecutable("Temp")}
           };
@@ -20,10 +20,10 @@ namespace Betzalel.SimpleBackup
 
     public override T GetSetting<T>(string settingName)
     {
-      object customValue;
+      string customValue;
 
       if (_backupConfiguration.TryGetValue(settingName, out customValue))
-        return (T)Convert.ChangeType(customValue, typeof(T));
+        return (T)Convert.ChangeType(customValue.Trim(), typeof(T));
 
       return base.GetSetting<T>(settingName);
     }

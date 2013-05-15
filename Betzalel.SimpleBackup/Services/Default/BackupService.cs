@@ -19,6 +19,8 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     private readonly string _tempDirectory;
     private readonly string[] _pathsToBackup;
+    private readonly string[] _pathsToExclude;
+    private readonly string[] _fileTypesToExclude;
 
     public BackupService(
       ILog log,
@@ -34,11 +36,15 @@ namespace Betzalel.SimpleBackup.Services.Default
       _tempDirectory = _settingsProvider.GetSetting<string>("TempDirectory");
 
       var backupPaths = _settingsProvider.GetSetting<string>("BackupPaths");
+      var excludedBackupPaths = _settingsProvider.GetSetting<string>("ExcludedBackupPaths");
+      var excludedFileTypes = _settingsProvider.GetSetting<string>("ExcludedFileTypes");
 
       if (backupPaths.Length == 0)
         throw new Exception("No Backup Paths configured.");
 
-      _pathsToBackup = backupPaths.Split(',');
+      _pathsToBackup = backupPaths.Split(',').Select(p => p.Trim().TrimEnd('\\', '/')).ToArray();
+      _pathsToExclude = excludedBackupPaths.Split(',').Select(p => p.Trim().TrimEnd('\\', '/')).ToArray();
+      _fileTypesToExclude = excludedFileTypes.Split(',').Select(p => p.Trim()).ToArray();
     }
 
     public void StartBackup()
@@ -132,10 +138,10 @@ namespace Betzalel.SimpleBackup.Services.Default
             switch (backupType)
             {
               case BackupHistoryType.Full:
-                AddFilesToFullBackup(backupFile, pathToBackup);
+                AddFilesToBackup(backupFile, BackupHistoryType.Full, pathToBackup);
                 break;
               case BackupHistoryType.Differential:
-                AddFilesToDifferentialBackup(backupFile, pathToBackup);
+                AddFilesToBackup(backupFile, BackupHistoryType.Differential, pathToBackup);
                 break;
             }
 
@@ -162,19 +168,21 @@ namespace Betzalel.SimpleBackup.Services.Default
       return numberOfBackedupFiles;
     }
 
-    private void AddFilesToFullBackup(ZipFile backupFile, string pathToBackup)
-    {
-      backupFile.AddDirectory(pathToBackup);
-    }
-
-    private void AddFilesToDifferentialBackup(ZipFile backupFile, string pathToBackup)
+    private void AddFilesToBackup(ZipFile backupFile, BackupHistoryType backupHistoryType, string pathToBackup)
     {
       var latestBackup = _backupHistoryService.GetLatestBackupDate();
 
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
-      var filesToBackup =
-        backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).Where(f => f.LastWriteTime > latestBackup);
+      var filesToBackup = backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).AsEnumerable();
+
+      if (backupHistoryType == BackupHistoryType.Differential)
+        filesToBackup = filesToBackup.Where(f => f.LastWriteTime > latestBackup);
+
+      if (_pathsToExclude.Any())
+        filesToBackup =
+          filesToBackup.Where(
+            f => !_pathsToExclude.Contains(f.DirectoryName) && !_fileTypesToExclude.Contains(f.Extension.TrimStart('.')));
 
       foreach (var fileToBackup in filesToBackup)
       {
