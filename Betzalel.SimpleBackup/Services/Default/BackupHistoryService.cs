@@ -1,23 +1,29 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml.Linq;
+using Betzalel.Infrastructure;
 using Betzalel.Infrastructure.Extensions;
-using Betzalel.Infrastructure.Utilities;
 
 namespace Betzalel.SimpleBackup.Services.Default
 {
   public class BackupHistoryService : IBackupHistoryService, IDisposable
   {
-    private readonly FileStream _backupFileStream;
+    private const char BackupLogFileSeperator = '|';
+    private readonly FileStream _backupHistoryFileStream;
+    private readonly StreamReader _backupLogFileReader;
+    private readonly StreamWriter _backupLogFileWriter;
 
-    public BackupHistoryService()
+    public BackupHistoryService(ISettingsProvider settingsProvider)
     {
-      var backupHistoryPath = PathUtil.MapToExecutable("BackupHistory.xml");
+      var backupHistoryFilePath = settingsProvider.GetSetting<string>("BackupHistoryFile");
+      var backupLogFilePath = settingsProvider.GetSetting<string>("BackupLogFile");
 
-      if (!File.Exists(backupHistoryPath))
+      if (!File.Exists(backupHistoryFilePath))
       {
-        using (var sw = File.CreateText(backupHistoryPath))
+        using (var sw = File.CreateText(backupHistoryFilePath))
         {
           var document = new XDocument(new XElement("Backups"));
 
@@ -25,15 +31,21 @@ namespace Betzalel.SimpleBackup.Services.Default
         }
       }
 
-      _backupFileStream =
-        File.Open(backupHistoryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+      _backupHistoryFileStream =
+        File.Open(backupHistoryFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+
+      var backupLogFileStream =
+        File.Open(backupLogFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+
+      _backupLogFileReader = new StreamReader(backupLogFileStream, Encoding.UTF8);
+      _backupLogFileWriter = new StreamWriter(backupLogFileStream, Encoding.UTF8) { AutoFlush = true };
     }
 
     public DateTime? GetLatestFullBackupDate()
     {
-      _backupFileStream.Seek(0, SeekOrigin.Begin);
+      _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
 
-      var document = XDocument.Load(_backupFileStream);
+      var document = XDocument.Load(_backupHistoryFileStream);
 
       return
         document.Root
@@ -42,28 +54,31 @@ namespace Betzalel.SimpleBackup.Services.Default
           .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("started").Value));
     }
 
-    public DateTime GetLatestBackupDate()
+    public DateTime? GetLatestBackupDate()
     {
-      _backupFileStream.Seek(0, SeekOrigin.Begin);
+      _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
 
-      var document = XDocument.Load(_backupFileStream);
+      var document = XDocument.Load(_backupHistoryFileStream);
 
       return
         document.Root
           .Elements("Backup")
-          .Max(x => DateTime.Parse(x.NotNullAttribute("started").Value));
+          .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("started").Value));
     }
 
     public void AddBackupHistoryEntry(
-      BackupHistoryType backupHistoryType, 
-      DateTime started, 
-      DateTime ended, 
-      TimeSpan uploadTime, 
-      int numberOfFilesBackedup)
+      BackupHistoryType backupHistoryType,
+      DateTime started,
+      DateTime ended,
+      TimeSpan uploadTime,
+      string[] backedupFilePaths)
     {
-      _backupFileStream.Seek(0, SeekOrigin.Begin);
+      UpdateBackupLog(
+        backedupFilePaths, backupHistoryType == BackupHistoryType.Full);
 
-      var document = XDocument.Load(_backupFileStream);
+      _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
+
+      var document = XDocument.Load(_backupHistoryFileStream);
 
       document.Root.Add(
         new XElement(
@@ -72,17 +87,53 @@ namespace Betzalel.SimpleBackup.Services.Default
           new XAttribute("started", started.ToString()),
           new XAttribute("ended", ended.ToString()),
           new XAttribute("uploadTime", uploadTime.ToString()),
-          new XAttribute("numberOfFilesBackedup", numberOfFilesBackedup.ToString())
-          ));
+          new XAttribute("numberOfFilesBackedup", backedupFilePaths.Length.ToString())));
 
-      _backupFileStream.SetLength(0);
+      _backupHistoryFileStream.SetLength(0);
 
-      document.Save(_backupFileStream);
+      document.Save(_backupHistoryFileStream);
     }
 
     public void Dispose()
     {
-      _backupFileStream.Dispose();
+      _backupHistoryFileStream.Dispose();
+      _backupLogFileReader.Dispose();
+      _backupLogFileWriter.Dispose();
+    }
+
+    private void UpdateBackupLog(string[] backedupFilePaths, bool clearLogFile)
+    {
+      IEnumerable<string> newBackedupFilePaths = backedupFilePaths;
+
+      var backupLogFileStream = _backupLogFileReader.BaseStream;
+
+      if (clearLogFile)
+      {
+        backupLogFileStream.SetLength(0);
+      }
+      else if (!_backupLogFileReader.EndOfStream)
+      {
+        backupLogFileStream.Seek(0, SeekOrigin.Begin);
+
+        var loggedFilePaths = _backupLogFileReader.ReadToEnd().Split(BackupLogFileSeperator);
+
+        newBackedupFilePaths = backedupFilePaths.Except(loggedFilePaths);
+      }
+      else
+      {
+        backupLogFileStream.Seek(0, SeekOrigin.End);
+      }
+
+      if (!newBackedupFilePaths.Any())
+        return;
+
+      foreach (var backedupFilePath in newBackedupFilePaths)
+      {
+        _backupLogFileWriter.Write(backedupFilePath + BackupLogFileSeperator);
+      }
+
+      //  Removes the last seperator
+      backupLogFileStream.SetLength(backupLogFileStream.Length - 1);
     }
   }
 }

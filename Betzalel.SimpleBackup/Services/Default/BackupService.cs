@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -58,14 +60,14 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       BackupHistoryType backupType;
 
-      var numberOfFilesBackedup = CreateBackupFiles(out backupType);
+      var backedupFilePaths = CreateBackupFiles(out backupType);
 
       var uploadTime = Stopwatch.StartNew();
 
       _backupStorageService.UploadBackupFilesToFtp();
 
       _backupHistoryService.AddBackupHistoryEntry(
-        backupType, backupStarted, DateTime.Now, uploadTime.Elapsed, numberOfFilesBackedup);
+        backupType, backupStarted, DateTime.Now, uploadTime.Elapsed, backedupFilePaths);
 
       Directory.Delete(_tempDirectory, true);
 
@@ -96,7 +98,7 @@ namespace Betzalel.SimpleBackup.Services.Default
       return true;
     }
 
-    private int CreateBackupFiles(out BackupHistoryType backupType)
+    private string[] CreateBackupFiles(out BackupHistoryType backupType)
     {
       var latestFullBackup = _backupHistoryService.GetLatestFullBackupDate();
 
@@ -115,7 +117,8 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       _log.Info("Starting " + backupType + " backup...");
 
-      var numberOfBackedupFiles = 0;
+      List<string> backedupFilePaths;
+      var totalBackedupFilePaths = new List<string>();
 
       for (var i = 0; i < _pathsToBackup.Length; i++)
       {
@@ -138,14 +141,16 @@ namespace Betzalel.SimpleBackup.Services.Default
             switch (backupType)
             {
               case BackupHistoryType.Full:
-                AddFilesToBackup(backupFile, BackupHistoryType.Full, pathToBackup);
+                backedupFilePaths = AddFilesToBackup(backupFile, BackupHistoryType.Full, pathToBackup);
                 break;
               case BackupHistoryType.Differential:
-                AddFilesToBackup(backupFile, BackupHistoryType.Differential, pathToBackup);
+                backedupFilePaths = AddFilesToBackup(backupFile, BackupHistoryType.Differential, pathToBackup);
                 break;
+              default:
+                throw new ArgumentOutOfRangeException("backupType");
             }
 
-            if (numberOfBackedupFiles == 0)
+            if (backedupFilePaths.Count == 0)
             {
               _log.Info("No files needed to backup.");
 
@@ -154,7 +159,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
             _log.Info("Backed up " + backupFile.Count + " files.");
 
-            numberOfBackedupFiles += backupFile.Count;
+            totalBackedupFilePaths.AddRange(backedupFilePaths);
 
             backupFile.Save();
           }
@@ -165,18 +170,20 @@ namespace Betzalel.SimpleBackup.Services.Default
         }
       }
 
-      return numberOfBackedupFiles;
+      return totalBackedupFilePaths.ToArray();
     }
 
-    private void AddFilesToBackup(ZipFile backupFile, BackupHistoryType backupHistoryType, string pathToBackup)
+    private List<string> AddFilesToBackup(ZipFile backupFile, BackupHistoryType backupHistoryType, string pathToBackup)
     {
+      var backedupFilePaths = new List<string>();
+
       var latestBackup = _backupHistoryService.GetLatestBackupDate();
 
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
       var filesToBackup = backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).AsEnumerable();
 
-      if (backupHistoryType == BackupHistoryType.Differential)
+      if (backupHistoryType == BackupHistoryType.Differential && latestBackup.HasValue)
         filesToBackup = filesToBackup.Where(f => f.LastWriteTime > latestBackup);
 
       if (_pathsToExclude.Any())
@@ -187,8 +194,12 @@ namespace Betzalel.SimpleBackup.Services.Default
       foreach (var fileToBackup in filesToBackup)
       {
         backupFile.AddFile(
-          fileToBackup.Name, fileToBackup.DirectoryName.Substring(pathToBackup.Length));
+          fileToBackup.FullName, fileToBackup.DirectoryName.Substring(pathToBackup.Length));
+
+        backedupFilePaths.Add(fileToBackup.FullName);
       }
+
+      return backedupFilePaths;
     }
   }
 }
