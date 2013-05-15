@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Betzalel.Infrastructure.SettingProviders;
 using Betzalel.Infrastructure.Utilities;
 
@@ -6,27 +7,25 @@ namespace Betzalel.SimpleBackup
 {
   public class BackupSettingsProvider : AppSettingsProvider
   {
-    private readonly string _tempDirectory;
+    private readonly Dictionary<string, object> _backupConfiguration;
 
     public BackupSettingsProvider()
     {
-      _tempDirectory = PathUtil.MapToExecutable("Temp");      
+      _backupConfiguration =
+        new Dictionary<string, object>
+          {
+            {"TempDirectory", PathUtil.MapToExecutable("Temp")}
+          };
     }
 
     public override T GetSetting<T>(string settingName)
     {
       object customValue;
 
-      switch (settingName)
-      {
-        case "TempDirectory":
-          customValue = _tempDirectory;
-          break;
-        default:
-          return base.GetSetting<T>(settingName);
-      }
+      if (_backupConfiguration.TryGetValue(settingName, out customValue))
+        return (T)Convert.ChangeType(customValue, typeof(T));
 
-      return (T)Convert.ChangeType(customValue, typeof(T));
+      return base.GetSetting<T>(settingName);
     }
   }
 }
