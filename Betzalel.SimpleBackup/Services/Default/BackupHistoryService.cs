@@ -15,6 +15,7 @@ namespace Betzalel.SimpleBackup.Services.Default
     private readonly FileStream _backupHistoryFileStream;
     private readonly StreamReader _backupLogFileReader;
     private readonly StreamWriter _backupLogFileWriter;
+    private HashSet<string> _backupLogFileCache;
 
     public BackupHistoryService(ISettingsProvider settingsProvider)
     {
@@ -38,7 +39,7 @@ namespace Betzalel.SimpleBackup.Services.Default
         File.Open(backupLogFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
 
       _backupLogFileReader = new StreamReader(backupLogFileStream, Encoding.UTF8);
-      _backupLogFileWriter = new StreamWriter(backupLogFileStream, Encoding.UTF8) { AutoFlush = true };
+      _backupLogFileWriter = new StreamWriter(backupLogFileStream, Encoding.UTF8);
     }
 
     public DateTime? GetLatestFullBackupDate()
@@ -94,6 +95,11 @@ namespace Betzalel.SimpleBackup.Services.Default
       document.Save(_backupHistoryFileStream);
     }
 
+    public bool IsBackedUp(string fullName)
+    {
+      return GetHistoryLog().Contains(fullName);
+    }
+
     public void Dispose()
     {
       _backupHistoryFileStream.Dispose();
@@ -115,25 +121,36 @@ namespace Betzalel.SimpleBackup.Services.Default
       {
         backupLogFileStream.Seek(0, SeekOrigin.Begin);
 
-        var loggedFilePaths = _backupLogFileReader.ReadToEnd().Split(BackupLogFileSeperator);
+        var loggedFilePaths = GetHistoryLog();
 
-        newBackedupFilePaths = backedupFilePaths.Except(loggedFilePaths);
+        newBackedupFilePaths = backedupFilePaths.Where(b => !loggedFilePaths.Contains(b));
       }
-      else
-      {
-        backupLogFileStream.Seek(0, SeekOrigin.End);
-      }
+
+      backupLogFileStream.Seek(0, SeekOrigin.End);
 
       if (!newBackedupFilePaths.Any())
         return;
+
+      if (!_backupLogFileCache.IsEmpty())
+        _backupLogFileWriter.Write(BackupLogFileSeperator);
 
       foreach (var backedupFilePath in newBackedupFilePaths)
       {
         _backupLogFileWriter.Write(backedupFilePath + BackupLogFileSeperator);
       }
 
+      _backupLogFileWriter.Flush();
+
       //  Removes the last seperator
       backupLogFileStream.SetLength(backupLogFileStream.Length - 1);
+
+      _backupLogFileCache = null;
+    }
+
+    private HashSet<string> GetHistoryLog()
+    {
+      return _backupLogFileCache ??
+             (_backupLogFileCache = new HashSet<string>(_backupLogFileReader.ReadToEnd().Split(BackupLogFileSeperator)));
     }
   }
 }

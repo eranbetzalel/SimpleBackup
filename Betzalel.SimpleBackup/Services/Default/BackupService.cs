@@ -64,7 +64,8 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       var uploadTime = Stopwatch.StartNew();
 
-      _backupStorageService.UploadBackupFilesToFtp();
+      if(!_backupStorageService.UploadBackupFilesToFtp())
+        uploadTime.Reset();
 
       _backupHistoryService.AddBackupHistoryEntry(
         backupType, backupStarted, DateTime.Now, uploadTime.Elapsed, backedupFilePaths);
@@ -106,7 +107,7 @@ namespace Betzalel.SimpleBackup.Services.Default
         _settingsProvider.GetSetting<int>("MinimumDaysBetweenFullBackups");
 
       if (!latestFullBackup.HasValue ||
-        DateTime.Now.AddDays(minimumDaysBetweenFullBackups) <= latestFullBackup.Value)
+        latestFullBackup.Value.AddDays(minimumDaysBetweenFullBackups) <= DateTime.Now)
       {
         backupType = BackupHistoryType.Full;
       }
@@ -177,14 +178,21 @@ namespace Betzalel.SimpleBackup.Services.Default
     {
       var backedupFilePaths = new List<string>();
 
-      var latestBackup = _backupHistoryService.GetLatestBackupDate();
-
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
       var filesToBackup = backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).AsEnumerable();
 
-      if (backupHistoryType == BackupHistoryType.Differential && latestBackup.HasValue)
-        filesToBackup = filesToBackup.Where(f => f.LastWriteTime > latestBackup);
+      if (backupHistoryType == BackupHistoryType.Differential)
+      {
+        var latestBackup = _backupHistoryService.GetLatestBackupDate();
+
+        if (!latestBackup.HasValue)
+          throw new Exception("Backup history is empty - could not perform differential backup.");
+
+        filesToBackup =
+          filesToBackup.Where(
+            f => f.LastWriteTime > latestBackup || !_backupHistoryService.IsBackedUp(f.FullName));
+      }
 
       if (_pathsToExclude.Any())
         filesToBackup =

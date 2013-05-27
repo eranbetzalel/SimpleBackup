@@ -13,5 +13,7 @@ namespace Betzalel.SimpleBackup.Services
       DateTime ended, 
       TimeSpan uploadTime, 
       string[] backedupFilePaths);
+
+    bool IsBackedUp(string fullName);
   }
 }
