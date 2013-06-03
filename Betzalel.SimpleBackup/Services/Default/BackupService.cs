@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -80,7 +79,7 @@ namespace Betzalel.SimpleBackup.Services.Default
       _log.Debug("Validating backup directories...");
 
       var missingDirectories =
-        backupPathsParts.Where(backupPathsPart => !Directory.Exists(backupPathsPart));
+        backupPathsParts.Where(backupPathsPart => !Directory.Exists(backupPathsPart)).ToArray();
 
       if (missingDirectories.Any())
       {
@@ -118,7 +117,6 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       _log.Info("Starting " + backupType + " backup...");
 
-      List<string> backedupFilePaths;
       var totalBackedupFilePaths = new List<string>();
 
       for (var i = 0; i < _pathsToBackup.Length; i++)
@@ -139,6 +137,8 @@ namespace Betzalel.SimpleBackup.Services.Default
             backupFile.CompressionMethod = CompressionMethod.BZip2;
             backupFile.CompressionLevel = CompressionLevel.BestCompression;
 
+            List<string> backedupFilePaths;
+
             switch (backupType)
             {
               case BackupHistoryType.Full:
@@ -158,11 +158,13 @@ namespace Betzalel.SimpleBackup.Services.Default
               continue;
             }
 
-            _log.Info("Backed up " + backupFile.Count + " files.");
+            _log.Info("Compressing " + backupFile.Count + " files...");
 
             totalBackedupFilePaths.AddRange(backedupFilePaths);
 
             backupFile.Save();
+
+            _log.Info("Compressing completed.");
           }
         }
         catch (Exception e)
@@ -180,7 +182,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
-      var filesToBackup = backupPathInfo.GetFiles("*.*", SearchOption.AllDirectories).AsEnumerable();
+      var filesToBackup = backupPathInfo.GetAllFiles().AsEnumerable();
 
       if (backupHistoryType == BackupHistoryType.Differential)
       {
@@ -201,6 +203,9 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       foreach (var fileToBackup in filesToBackup)
       {
+        if (fileToBackup.DirectoryName == null)
+          throw new Exception(fileToBackup.FullName + " has no Directory Name.");
+
         backupFile.AddFile(
           fileToBackup.FullName, fileToBackup.DirectoryName.Substring(pathToBackup.Length));
 

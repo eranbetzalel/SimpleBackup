@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <log4net>
   <root>
-    
   </root>
+
   <logger name="Betzalel" >
     <level value="ALL" />
     <appender-ref ref="ColoredConsoleAppender" />

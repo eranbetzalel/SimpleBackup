@@ -18,7 +18,7 @@ namespace Betzalel.SimpleBackup.Services.Default
       _settingsProvider = settingsProvider;
     }
 
-    public void UploadBackupFilesToFtp()
+    public bool UploadBackupFilesToFtp()
     {
       try
       {
@@ -30,7 +30,7 @@ namespace Betzalel.SimpleBackup.Services.Default
         {
           _log.Info("No files to upload.");
 
-          return;
+          return false;
         }
 
         var relativeFtpBackupDirectory =
@@ -74,10 +74,14 @@ namespace Betzalel.SimpleBackup.Services.Default
 
           _log.Info("Finished uploading files to the FTP server.");
         }
+
+        return true;
       }
       catch (Exception e)
       {
         _log.Error("Failed to upload files to FTP server.", e);
+
+        return false;
       }
     }
   }

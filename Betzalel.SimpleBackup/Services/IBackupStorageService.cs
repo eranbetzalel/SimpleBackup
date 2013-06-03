@@ -2,6 +2,6 @@
 {
   public interface IBackupStorageService
   {
-    void UploadBackupFilesToFtp();
+    bool UploadBackupFilesToFtp();
   }
 }
