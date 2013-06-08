@@ -235,7 +235,9 @@ namespace Betzalel.SimpleBackup.Services.Default
       if (_pathsToExclude.Any())
         filesToBackup =
           filesToBackup.Where(
-            f => !_pathsToExclude.Contains(f.DirectoryName) && !_fileTypesToExclude.Contains(f.Extension.TrimStart('.')));
+            f => 
+              !_pathsToExclude.Any(e => f.DirectoryName.StartsWith(e)) && 
+              !_fileTypesToExclude.Contains(f.Extension.TrimStart('.')));
 
       foreach (var fileToBackup in filesToBackup)
       {
