@@ -4,7 +4,7 @@
   </root>
 
   <logger name="Betzalel" >
-    <level value="ALL" />
+    <level value="INFO" />
     <appender-ref ref="ColoredConsoleAppender" />
     <appender-ref ref="RollingFileAppender" />
     <appender-ref ref="TraceAppender" />
@@ -13,7 +13,7 @@
   <appender name="ColoredConsoleAppender" type="log4net.Appender.ColoredConsoleAppender">
     <mapping>
       <level value="DEBUG" />
-      <backColor value="Green" />
+      <foreColor value="Green" />
     </mapping>
     <mapping>
       <level value="INFO" />

@@ -248,6 +248,12 @@ namespace Betzalel.SimpleBackup.Services.Default
         backedupFilePaths.Add(fileToBackup.FullName);
 
         totalSize += fileToBackup.Length;
+
+        _log.Debug(
+          () =>
+          string.Format(
+            "Adding file to backup: {0} ({1:N3} bytes).",
+            fileToBackup.FullName, fileToBackup.Length));
       }
     }
   }

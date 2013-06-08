@@ -31,7 +31,7 @@ namespace Betzalel.Infrastructure.Loggers
 
     public void Debug(string message)
     {
-      if (_isDebug)
+      if (!_isDebug)
         return;
 
       _logger.Debug(message);
@@ -39,7 +39,7 @@ namespace Betzalel.Infrastructure.Loggers
 
     public void Debug(Func<string> messageFunc)
     {
-      if (_isDebug)
+      if (!_isDebug)
         return;
 
       _logger.Debug(messageFunc());
