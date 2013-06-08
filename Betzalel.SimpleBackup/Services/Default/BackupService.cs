@@ -57,17 +57,32 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       Directory.CreateDirectory(_tempDirectory);
 
+      TimeSpan? uploadTime = null;
       BackupHistoryType backupType;
+      List<string> backedupFilePaths;
+      var backupResult = BackupResult.Success;
 
-      var backedupFilePaths = CreateBackupFiles(out backupType);
+      if (!CreateBackupFiles(out backupType, out backedupFilePaths))
+      {
+        backupResult = BackupResult.FileCompressFailed;
+      }
+      else
+      {
+        var uploadTimeStopwatch = Stopwatch.StartNew();
 
-      var uploadTime = Stopwatch.StartNew();
+        if (!_backupStorageService.UploadBackupFilesToFtp())
+          backupResult = BackupResult.FtpUploadFailed;
 
-      if(!_backupStorageService.UploadBackupFilesToFtp())
-        uploadTime.Reset();
+        uploadTime = uploadTimeStopwatch.Elapsed;
+      }
 
       _backupHistoryService.AddBackupHistoryEntry(
-        backupType, backupStarted, DateTime.Now, uploadTime.Elapsed, backedupFilePaths);
+        backupType,
+        backupStarted,
+        DateTime.Now,
+        uploadTime,
+        backedupFilePaths,
+        backupResult);
 
       Directory.Delete(_tempDirectory, true);
 
@@ -98,9 +113,9 @@ namespace Betzalel.SimpleBackup.Services.Default
       return true;
     }
 
-    private string[] CreateBackupFiles(out BackupHistoryType backupType)
+    private bool CreateBackupFiles(out BackupHistoryType backupType, out List<string> backedupFilePaths)
     {
-      var latestFullBackup = _backupHistoryService.GetLatestFullBackupDate();
+      var latestFullBackup = _backupHistoryService.GetLatestSuccessfulFullBackupDate();
 
       var minimumDaysBetweenFullBackups =
         _settingsProvider.GetSetting<int>("MinimumDaysBetweenFullBackups");
@@ -117,7 +132,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       _log.Info("Starting " + backupType + " backup...");
 
-      var totalBackedupFilePaths = new List<string>();
+      backedupFilePaths = new List<string>();
 
       for (var i = 0; i < _pathsToBackup.Length; i++)
       {
@@ -137,30 +152,43 @@ namespace Betzalel.SimpleBackup.Services.Default
             backupFile.CompressionMethod = CompressionMethod.BZip2;
             backupFile.CompressionLevel = CompressionLevel.BestCompression;
 
-            List<string> backedupFilePaths;
+            long currentBackupPathTotalFileSize;
+            ICollection<string> currentBackupPathBackedupFilePaths;
 
             switch (backupType)
             {
               case BackupHistoryType.Full:
-                backedupFilePaths = AddFilesToBackup(backupFile, BackupHistoryType.Full, pathToBackup);
+                AddFilesToBackup(
+                  backupFile,
+                  BackupHistoryType.Full,
+                  pathToBackup,
+                  out currentBackupPathBackedupFilePaths,
+                  out currentBackupPathTotalFileSize);
                 break;
               case BackupHistoryType.Differential:
-                backedupFilePaths = AddFilesToBackup(backupFile, BackupHistoryType.Differential, pathToBackup);
+                AddFilesToBackup(
+                  backupFile,
+                  BackupHistoryType.Differential,
+                  pathToBackup,
+                  out currentBackupPathBackedupFilePaths,
+                  out currentBackupPathTotalFileSize);
                 break;
               default:
                 throw new ArgumentOutOfRangeException("backupType");
             }
 
-            if (backedupFilePaths.Count == 0)
+            if (currentBackupPathBackedupFilePaths.Count == 0)
             {
               _log.Info("No files needed to backup.");
 
               continue;
             }
 
-            _log.Info("Compressing " + backupFile.Count + " files...");
+            backedupFilePaths.AddRange(currentBackupPathBackedupFilePaths);
 
-            totalBackedupFilePaths.AddRange(backedupFilePaths);
+            _log.Info(
+              "Compressing " + backupFile.Count + " files (" +
+              currentBackupPathTotalFileSize.ToString("N3") + " bytes)...");
 
             backupFile.Save();
 
@@ -170,15 +198,23 @@ namespace Betzalel.SimpleBackup.Services.Default
         catch (Exception e)
         {
           _log.Error("Failed to backup " + pathToBackup + ".", e);
+
+          return false;
         }
       }
 
-      return totalBackedupFilePaths.ToArray();
+      return true;
     }
 
-    private List<string> AddFilesToBackup(ZipFile backupFile, BackupHistoryType backupHistoryType, string pathToBackup)
+    private void AddFilesToBackup(
+      ZipFile backupFile,
+      BackupHistoryType backupHistoryType,
+      string pathToBackup,
+      out ICollection<string> backedupFilePaths,
+      out long totalSize)
     {
-      var backedupFilePaths = new List<string>();
+      totalSize = 0;
+      backedupFilePaths = new List<string>();
 
       var backupPathInfo = new DirectoryInfo(pathToBackup);
 
@@ -186,7 +222,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       if (backupHistoryType == BackupHistoryType.Differential)
       {
-        var latestBackup = _backupHistoryService.GetLatestBackupDate();
+        var latestBackup = _backupHistoryService.GetLatestSuccessfullBackupDate();
 
         if (!latestBackup.HasValue)
           throw new Exception("Backup history is empty - could not perform differential backup.");
@@ -210,9 +246,9 @@ namespace Betzalel.SimpleBackup.Services.Default
           fileToBackup.FullName, fileToBackup.DirectoryName.Substring(pathToBackup.Length));
 
         backedupFilePaths.Add(fileToBackup.FullName);
-      }
 
-      return backedupFilePaths;
+        totalSize += fileToBackup.Length;
+      }
     }
   }
 }

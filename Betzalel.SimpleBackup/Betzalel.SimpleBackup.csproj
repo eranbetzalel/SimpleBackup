@@ -27,12 +27,15 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <PlatformTarget>x86</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
+    <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>backup-restore.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Autofac">
@@ -58,6 +61,7 @@
   <ItemGroup>
     <Compile Include="BackupSettingsProvider.cs" />
     <Compile Include="Services\BackupHistoryType.cs" />
+    <Compile Include="Services\BackupResult.cs" />
     <Compile Include="Services\Default\BackupService.cs" />
     <Compile Include="Services\Default\BackupHistoryService.cs" />
     <Compile Include="Services\Default\BackupStorageService.cs" />
@@ -78,11 +82,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="backup-restore.ico" />
     <Content Include="Log4Net.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

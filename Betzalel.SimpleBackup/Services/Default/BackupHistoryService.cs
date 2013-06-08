@@ -42,7 +42,7 @@ namespace Betzalel.SimpleBackup.Services.Default
       _backupLogFileWriter = new StreamWriter(backupLogFileStream, Encoding.UTF8);
     }
 
-    public DateTime? GetLatestFullBackupDate()
+    public DateTime? GetLatestSuccessfulFullBackupDate()
     {
       _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
 
@@ -51,11 +51,13 @@ namespace Betzalel.SimpleBackup.Services.Default
       return
         document.Root
           .Elements("Backup")
-          .Where(x => x.NotNullAttribute("type").Value == BackupHistoryType.Full.ToString())
+          .Where(x =>
+            x.NotNullAttribute("type").Value == BackupHistoryType.Full.ToString() &&
+            x.NotNullAttribute("result").Value == BackupResult.Success.ToString())
           .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("started").Value));
     }
 
-    public DateTime? GetLatestBackupDate()
+    public DateTime? GetLatestSuccessfullBackupDate()
     {
       _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
 
@@ -64,15 +66,17 @@ namespace Betzalel.SimpleBackup.Services.Default
       return
         document.Root
           .Elements("Backup")
+          .Where(x => x.NotNullAttribute("result").Value == BackupResult.Success.ToString())
           .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("started").Value));
     }
 
     public void AddBackupHistoryEntry(
-      BackupHistoryType backupHistoryType,
-      DateTime started,
-      DateTime ended,
-      TimeSpan uploadTime,
-      string[] backedupFilePaths)
+      BackupHistoryType backupHistoryType, 
+      DateTime started, 
+      DateTime ended, 
+      TimeSpan? uploadTime, 
+      ICollection<string> backedupFilePaths, 
+      BackupResult backupResult)
     {
       UpdateBackupLog(
         backedupFilePaths, backupHistoryType == BackupHistoryType.Full);
@@ -88,7 +92,8 @@ namespace Betzalel.SimpleBackup.Services.Default
           new XAttribute("started", started.ToString()),
           new XAttribute("ended", ended.ToString()),
           new XAttribute("uploadTime", uploadTime.ToString()),
-          new XAttribute("numberOfFilesBackedup", backedupFilePaths.Length.ToString())));
+          new XAttribute("numberOfFilesBackedup", backedupFilePaths.Count.ToString()),
+          new XAttribute("result", backupResult.ToString())));
 
       _backupHistoryFileStream.SetLength(0);
 
@@ -107,7 +112,7 @@ namespace Betzalel.SimpleBackup.Services.Default
       _backupLogFileWriter.Dispose();
     }
 
-    private void UpdateBackupLog(string[] backedupFilePaths, bool clearLogFile)
+    private void UpdateBackupLog(ICollection<string> backedupFilePaths, bool clearLogFile)
     {
       IEnumerable<string> newBackedupFilePaths = backedupFilePaths;
 
