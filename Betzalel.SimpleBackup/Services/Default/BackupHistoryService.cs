@@ -78,8 +78,9 @@ namespace Betzalel.SimpleBackup.Services.Default
       ICollection<string> backedupFilePaths, 
       BackupResult backupResult)
     {
-      UpdateBackupLog(
-        backedupFilePaths, backupHistoryType == BackupHistoryType.Full);
+      if (backupResult == BackupResult.Success)
+        UpdateBackupLog(
+          backedupFilePaths, backupHistoryType == BackupHistoryType.Full);
 
       _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
 
