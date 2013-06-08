@@ -188,7 +188,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
             _log.Info(
               "Compressing " + backupFile.Count + " files (" +
-              currentBackupPathTotalFileSize.ToString("N3") + " bytes)...");
+              currentBackupPathTotalFileSize.ToString("N0") + " bytes)...");
 
             backupFile.Save();
 
@@ -252,7 +252,7 @@ namespace Betzalel.SimpleBackup.Services.Default
         _log.Debug(
           () =>
           string.Format(
-            "Adding file to backup: {0} ({1:N3} bytes).",
+            "Adding file to backup: {0} ({1:N0} bytes).",
             fileToBackup.FullName, fileToBackup.Length));
       }
     }
