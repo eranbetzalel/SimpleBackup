@@ -22,6 +22,7 @@ namespace Betzalel.SimpleBackup.Services.Default
     private readonly string[] _pathsToBackup;
     private readonly string[] _pathsToExclude;
     private readonly string[] _fileTypesToExclude;
+    private float _entriesSavedLogPoint;
 
     public BackupService(
       ILog log,
@@ -43,9 +44,25 @@ namespace Betzalel.SimpleBackup.Services.Default
       if (backupPaths.Length == 0)
         throw new Exception("No Backup Paths configured.");
 
-      _pathsToBackup = backupPaths.Split(',').Select(p => p.Trim().TrimEnd('\\', '/')).ToArray();
-      _pathsToExclude = excludedBackupPaths.Split(',').Select(p => p.Trim().TrimEnd('\\', '/')).ToArray();
-      _fileTypesToExclude = excludedFileTypes.Split(',').Select(p => p.Trim()).ToArray();
+      var splitChar = ",".ToCharArray();
+
+      _pathsToBackup =
+        backupPaths
+        .Split(splitChar, StringSplitOptions.RemoveEmptyEntries)
+        .Select(p => p.Trim().TrimEnd('\\', '/'))
+        .ToArray();
+
+      _pathsToExclude =
+        excludedBackupPaths
+          .Split(splitChar, StringSplitOptions.RemoveEmptyEntries)
+          .Select(p => p.Trim().TrimEnd('\\', '/'))
+          .ToArray();
+
+      _fileTypesToExclude =
+        excludedFileTypes
+          .Split(splitChar, StringSplitOptions.RemoveEmptyEntries)
+          .Select(p => p.Trim())
+          .ToArray();
     }
 
     public void StartBackup()
@@ -190,7 +207,13 @@ namespace Betzalel.SimpleBackup.Services.Default
               "Compressing " + backupFile.Count + " files (" +
               currentBackupPathTotalFileSize.ToString("N0") + " bytes)...");
 
+            backupFile.SaveProgress += BackupFileOnSaveProgress;
+
+            _entriesSavedLogPoint = 0.1f;
+
             backupFile.Save();
+
+            backupFile.SaveProgress -= BackupFileOnSaveProgress;
 
             _log.Info("Compressing completed.");
           }
@@ -204,6 +227,27 @@ namespace Betzalel.SimpleBackup.Services.Default
       }
 
       return true;
+    }
+
+    private void BackupFileOnSaveProgress(object sender, SaveProgressEventArgs saveProgressEventArgs)
+    {
+      if (saveProgressEventArgs.EventType != ZipProgressEventType.Saving_AfterWriteEntry)
+        return;
+
+      var entriesPercent = (float)saveProgressEventArgs.EntriesSaved / saveProgressEventArgs.EntriesTotal;
+
+      if (entriesPercent < _entriesSavedLogPoint)
+        return;
+
+      _log.Info(
+        string.Format(
+          "Compress file progress: {0:N0} of {1:N0} ({2:P}) of {3}.",
+          saveProgressEventArgs.EntriesSaved,
+          saveProgressEventArgs.EntriesTotal,
+          entriesPercent,
+          Path.GetFileName(saveProgressEventArgs.ArchiveName)));
+
+      _entriesSavedLogPoint += 0.1f;
     }
 
     private void AddFilesToBackup(
@@ -235,8 +279,8 @@ namespace Betzalel.SimpleBackup.Services.Default
       if (_pathsToExclude.Any())
         filesToBackup =
           filesToBackup.Where(
-            f => 
-              !_pathsToExclude.Any(e => f.DirectoryName.StartsWith(e)) && 
+            f =>
+              !_pathsToExclude.Any(e => f.DirectoryName.StartsWith(e)) &&
               !_fileTypesToExclude.Contains(f.Extension.TrimStart('.')));
 
       foreach (var fileToBackup in filesToBackup)
