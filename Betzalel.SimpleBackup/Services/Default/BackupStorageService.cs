@@ -85,20 +85,40 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     private void UploadBackupFile(FtpClient ftpClient, string ftpBackupPath, string backupFilePath)
     {
+      Stream ftpBackupFile;
+      long totalBytesWritten = 0;
+
       var backupFilename = Path.GetFileName(backupFilePath);
 
-      using (var ftpBackupFile = ftpClient.OpenWrite(ftpBackupPath + "/" + backupFilename, FtpDataType.Binary))
+      var ftpBackupFilePath = ftpBackupPath + "/" + backupFilename;
+
+      if(ftpClient.FileExists(ftpBackupFilePath))
+      {
+        var ftpBackupFileSize = ftpClient.GetFileSize(ftpBackupFilePath);
+
+        totalBytesWritten = ftpBackupFileSize;
+
+        ftpBackupFile = ftpClient.OpenAppend(ftpBackupPath + "/" + backupFilename, FtpDataType.Binary);
+      }
+      else
+      {
+        ftpBackupFile = ftpClient.OpenWrite(ftpBackupPath + "/" + backupFilename, FtpDataType.Binary);
+      }
+
+      try
       {
         using (var backupFile = File.OpenRead(backupFilePath))
         {
           int bytesRead;
-          long totalBytesWritten = 0;
           var totalBytes = backupFile.Length;
           var bytesWrittenLogPoint = 0.1;
 
           var buffer = new byte[4096];
 
           _log.Info(string.Format("Uploading {0} ({1:N0} bytes)...", backupFilename, totalBytes));
+
+          if (totalBytesWritten > 0)
+            backupFile.Seek(totalBytesWritten, SeekOrigin.Begin);
 
           while ((bytesRead = backupFile.Read(buffer, 0, buffer.Length)) > 0)
           {
@@ -121,6 +141,10 @@ namespace Betzalel.SimpleBackup.Services.Default
             }
           }
         }
+      }
+      finally
+      {
+        ftpBackupFile.Dispose();
       }
     }
   }
