@@ -194,6 +194,10 @@ namespace Betzalel.SimpleBackup.Services.Default
 
             backupFile.CompressionMethod = CompressionMethod.BZip2;
             backupFile.CompressionLevel = CompressionLevel.BestCompression;
+            backupFile.ZipErrorAction = ZipErrorAction.Skip;
+
+            backupFile.ZipError += BackupFileOnZipError;
+            backupFile.SaveProgress += BackupFileOnSaveProgress;
 
             long currentBackupPathTotalFileSize;
             ICollection<string> currentBackupPathBackedupFilePaths;
@@ -233,11 +237,6 @@ namespace Betzalel.SimpleBackup.Services.Default
               "Compressing " + backupFile.Count + " files (" +
               currentBackupPathTotalFileSize.ToString("N0") + " bytes)...");
 
-            backupFile.ZipErrorAction = ZipErrorAction.InvokeErrorEvent;
-
-            backupFile.ZipError += BackupFileOnZipError;
-            backupFile.SaveProgress += BackupFileOnSaveProgress;
-
             _entriesSavedLogPoint = 0.1f;
 
             backupFile.Save();
@@ -265,7 +264,8 @@ namespace Betzalel.SimpleBackup.Services.Default
     private void BackupFileOnZipError(object sender, ZipErrorEventArgs zipErrorEventArgs)
     {
       _log.Error(
-        "An error occurred while compressing " + zipErrorEventArgs.FileName + ".", zipErrorEventArgs.Exception);
+        "An error occurred while compressing " + zipErrorEventArgs.FileName + " - file will be skipped.",
+        zipErrorEventArgs.Exception);
 
       zipErrorEventArgs.CurrentEntry.ZipErrorAction = ZipErrorAction.Skip;
     }
