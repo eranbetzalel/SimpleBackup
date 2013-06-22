@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Reflection;
 using Autofac;
 using Betzalel.Infrastructure;
@@ -6,14 +7,18 @@ using Betzalel.Infrastructure.Loggers;
 using Betzalel.Infrastructure.Scheduler;
 using Betzalel.SimpleBackup.Services;
 using Betzalel.SimpleBackup.Services.Default;
+using Topshelf;
 
 namespace Betzalel.SimpleBackup
 {
-  class Program
+  public class Program
   {
-    static void Main()
+    static void Main(string[] args)
     {
-      InitializeConsole();
+      var isConsole = args.Any(x => x == "-console");
+
+      if (isConsole)
+        InitializeConsole();
 
       var container = InitializeIoc();
 
@@ -22,17 +27,20 @@ namespace Betzalel.SimpleBackup
       var version = Assembly.GetExecutingAssembly().GetName().Version;
 
       log.Info("---------------------- Simple Backup v" + version);
-      log.Info("------ Console mode - press Escape to exit ------");
+
+      if (isConsole)
+        log.Info("------ Console mode - press Escape to exit ------");
 
       var backupService = container.Resolve<IBackupService>();
 
-      backupService.StartBackup();
-
-      while (Console.ReadKey(true).Key != ConsoleKey.Escape)
+      if (isConsole)
       {
+        StartConsole(backupService);
       }
-
-      backupService.StopBackup();
+      else
+      {
+        StartService(backupService);
+      }
     }
 
     private static void InitializeConsole()
@@ -66,6 +74,35 @@ namespace Betzalel.SimpleBackup
       builder.RegisterType<BackupHistoryService>().AsImplementedInterfaces().SingleInstance();
 
       return builder.Build();
+    }
+
+    private static void StartConsole(IBackupService backupService)
+    {
+      backupService.StartBackup();
+
+      while (Console.ReadKey(true).Key != ConsoleKey.Escape)
+      {
+      }
+
+      backupService.StopBackup();
+    }
+
+    private static void StartService(IBackupService backupService)
+    {
+      HostFactory.Run(x =>
+      {
+        x.Service<IBackupService>(s =>
+        {
+          s.ConstructUsing(name => backupService);
+          s.WhenStarted(b => b.StartBackup());
+          s.WhenStopped(b => b.StopBackup());
+        });
+        x.RunAsLocalSystem();
+
+        x.SetDescription("Simple Backup");
+        x.SetDisplayName("Simple Backup");
+        x.SetServiceName("SimpleBackup");
+      });
     }
   }
 }
