@@ -60,11 +60,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BackupSettingsProvider.cs" />
-    <Compile Include="Services\BackupHistoryType.cs" />
-    <Compile Include="Services\BackupResult.cs" />
+    <Compile Include="Models\BackupHistoryEntry.cs" />
+    <Compile Include="Types\BackupType.cs" />
+    <Compile Include="Types\BackupState.cs" />
+    <Compile Include="Services\Default\BackupCompressor.cs" />
     <Compile Include="Services\Default\BackupService.cs" />
     <Compile Include="Services\Default\BackupHistoryService.cs" />
     <Compile Include="Services\Default\BackupStorageService.cs" />
+    <Compile Include="Services\IBackupCompressor.cs" />
     <Compile Include="Services\IBackupHistoryService.cs" />
     <Compile Include="Services\IBackupService.cs" />
     <Compile Include="Program.cs" />

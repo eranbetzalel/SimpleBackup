@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.FtpClient;
 using Betzalel.Infrastructure;
+using Betzalel.SimpleBackup.Models;
 
 namespace Betzalel.SimpleBackup.Services.Default
 {
@@ -18,19 +19,15 @@ namespace Betzalel.SimpleBackup.Services.Default
       _settingsProvider = settingsProvider;
     }
 
-    public bool UploadBackupFilesToFtp()
+    public bool ProcessStorageReadyBackupEntry(BackupHistoryEntry backupEntryToStorage)
     {
       try
       {
-        var tempDirectory = _settingsProvider.GetSetting<string>("TempDirectory");
-
-        var tempBackupFilePaths = Directory.GetFiles(tempDirectory, "*.zip");
-
-        if (!tempBackupFilePaths.Any())
+        if (!backupEntryToStorage.StoragePendingFilesPaths.Any())
         {
-          _log.Info("No files to upload.");
+          _log.Debug("No files to store.");
 
-          return false;
+          return true;
         }
 
         var relativeFtpBackupDirectory =
@@ -53,13 +50,24 @@ namespace Betzalel.SimpleBackup.Services.Default
           ftpClient.Connect();
 
           var ftpBackupPath =
-            relativeFtpBackupDirectory + "/" + DateTime.Now.ToString("yyyyMMdd_HHmm") + " Full Backup";
+            string.Format(
+              "{0}/{1} {2} Backup",
+              relativeFtpBackupDirectory,
+              backupEntryToStorage.CompressStarted.ToString("yyyyMMdd_HHmmss"),
+              backupEntryToStorage.BackupType);
 
           ftpClient.CreateDirectory(ftpBackupPath);
 
-          foreach (var tempBackupFilePath in tempBackupFilePaths)
+          //  Upload compressed backups to FTP server
+          foreach (var storagePendingFilePath in backupEntryToStorage.StoragePendingFilesPaths)
           {
-            UploadBackupFile(ftpClient, ftpBackupPath, tempBackupFilePath);
+            UploadBackupFile(ftpClient, ftpBackupPath, storagePendingFilePath);
+          }
+
+          //  Removed already uploaded backup files
+          foreach (var storagePendingFilePath in backupEntryToStorage.StoragePendingFilesPaths)
+          {
+            File.Delete(storagePendingFilePath);
           }
 
           _log.Info("Finished uploading files to the FTP server.");

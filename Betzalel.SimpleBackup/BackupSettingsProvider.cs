@@ -14,6 +14,7 @@ namespace Betzalel.SimpleBackup
       _backupConfiguration =
         new Dictionary<string, string>
           {
+            {"StoragePendingDirectory", PathUtil.MapToExecutable("StoragePending")},
             {"TempDirectory", PathUtil.MapToExecutable("Temp")},
             {"BackupHistoryFile", PathUtil.MapToExecutable("BackupHistory.xml")},
             {"BackupLogFile", PathUtil.MapToExecutable("BackupLog.txt")}

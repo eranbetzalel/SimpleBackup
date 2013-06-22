@@ -1,7 +1,9 @@
-﻿namespace Betzalel.SimpleBackup.Services
+﻿using Betzalel.SimpleBackup.Models;
+
+namespace Betzalel.SimpleBackup.Services
 {
   public interface IBackupStorageService
   {
-    bool UploadBackupFilesToFtp();
+    bool ProcessStorageReadyBackupEntry(BackupHistoryEntry backupEntryToStorage);
   }
 }

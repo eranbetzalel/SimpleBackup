@@ -1,13 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text;
 using Betzalel.Infrastructure;
-using Betzalel.Infrastructure.Extensions;
-using Ionic.Zip;
-using Ionic.Zlib;
+using Betzalel.Infrastructure.Scheduler;
+using Betzalel.SimpleBackup.Types;
 
 namespace Betzalel.SimpleBackup.Services.Default
 {
@@ -16,291 +11,106 @@ namespace Betzalel.SimpleBackup.Services.Default
     private readonly ILog _log;
     private readonly ISettingsProvider _settingsProvider;
     private readonly IBackupHistoryService _backupHistoryService;
+    private readonly IBackupCompressor _backupCompressor;
     private readonly IBackupStorageService _backupStorageService;
-
-    private readonly string _tempDirectory;
-    private readonly string[] _pathsToBackup;
-    private readonly string[] _pathsToExclude;
-    private readonly string[] _fileTypesToExclude;
-    private float _entriesSavedLogPoint;
+    private readonly Scheduler _scheduler;
 
     public BackupService(
       ILog log,
       ISettingsProvider settingsProvider,
       IBackupHistoryService backupHistoryService,
-      IBackupStorageService backupStorageService)
+      IBackupCompressor backupCompressor,
+      IBackupStorageService backupStorageService,
+      Scheduler scheduler)
     {
       _log = log;
       _settingsProvider = settingsProvider;
       _backupHistoryService = backupHistoryService;
+      _backupCompressor = backupCompressor;
       _backupStorageService = backupStorageService;
-
-      _tempDirectory = _settingsProvider.GetSetting<string>("TempDirectory");
-
-      var backupPaths = _settingsProvider.GetSetting<string>("BackupPaths");
-      var excludedBackupPaths = _settingsProvider.GetSetting<string>("ExcludedBackupPaths");
-      var excludedFileTypes = _settingsProvider.GetSetting<string>("ExcludedFileTypes");
-
-      if (backupPaths.Length == 0)
-        throw new Exception("No Backup Paths configured.");
-
-      var splitChar = ",".ToCharArray();
-
-      _pathsToBackup =
-        backupPaths
-        .Split(splitChar, StringSplitOptions.RemoveEmptyEntries)
-        .Select(p => p.Trim().TrimEnd('\\', '/'))
-        .ToArray();
-
-      _pathsToExclude =
-        excludedBackupPaths
-          .Split(splitChar, StringSplitOptions.RemoveEmptyEntries)
-          .Select(p => p.Trim().TrimEnd('\\', '/'))
-          .ToArray();
-
-      _fileTypesToExclude =
-        excludedFileTypes
-          .Split(splitChar, StringSplitOptions.RemoveEmptyEntries)
-          .Select(p => p.Trim())
-          .ToArray();
+      _scheduler = scheduler;
     }
 
     public void StartBackup()
     {
-      var backupStarted = DateTime.Now;
+      _log.Info("Starting backup tasks...");
 
-      if (!ValidateBackupDirectories(_pathsToBackup))
-        return;
+      _scheduler.AddDailyTask(
+        "BackupCompress",
+        BackupCompressTask,
+        new Time(DateTime.Parse(_settingsProvider.GetSetting<string>("DailyBackupCompressStartTime"))),
+        TaskConcurrencyOptions.Skip);
 
-      Directory.CreateDirectory(_tempDirectory);
+      _scheduler.AddTask(
+        "BackupStorage",
+        BackupStorageTask,
+        TimeSpan.Zero,
+        TimeSpan.FromSeconds(_settingsProvider.GetSetting<long>("DailyBackupStorageInterval")),
+        TaskConcurrencyOptions.Skip);
+    }
 
-      TimeSpan? uploadTime = null;
-      BackupHistoryType backupType;
+    public void StopBackup()
+    {
+      _log.Info("Stopping backup tasks...");
+
+      _scheduler.RemoveAll();
+    }
+
+    private void BackupCompressTask()
+    {
+      _log.Debug("Backup compress task started...");
+
+      BackupType backupType;
       List<string> backedupFilePaths;
-      var backupResult = BackupResult.Success;
+      List<string> storagePendingFilesPaths;
 
-      if (!CreateBackupFiles(out backupType, out backedupFilePaths))
-      {
-        backupResult = BackupResult.FileCompressFailed;
-      }
-      else
-      {
-        var uploadTimeStopwatch = Stopwatch.StartNew();
+      var compressStarted = DateTime.Now;
+      var backupState = BackupState.FileCompressSuccess;
 
-        if (!_backupStorageService.UploadBackupFilesToFtp())
-          backupResult = BackupResult.FtpUploadFailed;
+      if (!_backupCompressor.CreateBackupFiles(out backupType, out backedupFilePaths, out storagePendingFilesPaths))
+        backupState = BackupState.FileCompressFailed;
 
-        uploadTime = uploadTimeStopwatch.Elapsed;
-      }
-
-      _backupHistoryService.AddBackupHistoryEntry(
+      _backupHistoryService.AddBackupCompressCompletedEntries(
         backupType,
-        backupStarted,
+        compressStarted,
         DateTime.Now,
-        uploadTime,
+        backupState,
         backedupFilePaths,
-        backupResult);
+        storagePendingFilesPaths);
 
-      Directory.Delete(_tempDirectory, true);
-
-      _log.Debug("Temp directory removed.");
+      _log.Debug("Backup compress task ended...");
     }
 
-    private bool ValidateBackupDirectories(string[] backupPathsParts)
+    private void BackupStorageTask()
     {
-      _log.Debug("Validating backup directories...");
+      _log.Debug("Backup storage task started...");
 
-      var missingDirectories =
-        backupPathsParts.Where(backupPathsPart => !Directory.Exists(backupPathsPart)).ToArray();
+      var backupEntriesToStorage = _backupHistoryService.GetBackupEntriesToStorage();
 
-      if (missingDirectories.Any())
+      foreach (var backupEntryToStorage in backupEntriesToStorage)
       {
-        _log.Error("Could not find directories: " + missingDirectories.ToStringList() + ".");
+        _log.Debug("Storing entry #" + backupEntryToStorage.Id + "...");
 
-        return false;
-      }
+        var backupState = BackupState.Success;
 
-      if (Directory.Exists(_tempDirectory))
-      {
-        _log.Debug("Deleting old temp dir...");
+        backupEntryToStorage.StorageStarted = DateTime.Now;
 
-        Directory.Delete(_tempDirectory, true);
-      }
-
-      return true;
-    }
-
-    private bool CreateBackupFiles(out BackupHistoryType backupType, out List<string> backedupFilePaths)
-    {
-      var latestFullBackup = _backupHistoryService.GetLatestSuccessfulFullBackupDate();
-
-      var minimumDaysBetweenFullBackups =
-        _settingsProvider.GetSetting<int>("MinimumDaysBetweenFullBackups");
-
-      if (!latestFullBackup.HasValue ||
-        latestFullBackup.Value.AddDays(minimumDaysBetweenFullBackups) <= DateTime.Now)
-      {
-        backupType = BackupHistoryType.Full;
-      }
-      else
-      {
-        backupType = BackupHistoryType.Differential;
-      }
-
-      _log.Info("Starting " + backupType + " backup...");
-
-      backedupFilePaths = new List<string>();
-
-      for (var i = 0; i < _pathsToBackup.Length; i++)
-      {
-        var pathToBackup = _pathsToBackup[i];
-
-        _log.Info("Searching files to backup at \"" + pathToBackup + "\"...");
-
-        try
+        if (!_backupStorageService.ProcessStorageReadyBackupEntry(backupEntryToStorage))
         {
-          var tempBackupFileName =
-            _tempDirectory + "\\Backup" + (i + 1) + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".zip";
-
-          using (var backupFile = new ZipFile(tempBackupFileName, Encoding.UTF8))
-          {
-            _log.Debug("Adding directory to backup " + pathToBackup + " directory...");
-
-            backupFile.CompressionMethod = CompressionMethod.BZip2;
-            backupFile.CompressionLevel = CompressionLevel.BestCompression;
-
-            long currentBackupPathTotalFileSize;
-            ICollection<string> currentBackupPathBackedupFilePaths;
-
-            switch (backupType)
-            {
-              case BackupHistoryType.Full:
-                AddFilesToBackup(
-                  backupFile,
-                  BackupHistoryType.Full,
-                  pathToBackup,
-                  out currentBackupPathBackedupFilePaths,
-                  out currentBackupPathTotalFileSize);
-                break;
-              case BackupHistoryType.Differential:
-                AddFilesToBackup(
-                  backupFile,
-                  BackupHistoryType.Differential,
-                  pathToBackup,
-                  out currentBackupPathBackedupFilePaths,
-                  out currentBackupPathTotalFileSize);
-                break;
-              default:
-                throw new ArgumentOutOfRangeException("backupType");
-            }
-
-            if (currentBackupPathBackedupFilePaths.Count == 0)
-            {
-              _log.Info("No files needed to backup.");
-
-              continue;
-            }
-
-            backedupFilePaths.AddRange(currentBackupPathBackedupFilePaths);
-
-            _log.Info(
-              "Compressing " + backupFile.Count + " files (" +
-              currentBackupPathTotalFileSize.ToString("N0") + " bytes)...");
-
-            backupFile.SaveProgress += BackupFileOnSaveProgress;
-
-            _entriesSavedLogPoint = 0.1f;
-
-            backupFile.Save();
-
-            backupFile.SaveProgress -= BackupFileOnSaveProgress;
-
-            _log.Info("Compressing completed.");
-          }
+          backupState = BackupState.StorageFailed;
         }
-        catch (Exception e)
+        else
         {
-          _log.Error("Failed to backup " + pathToBackup + ".", e);
-
-          return false;
+          backupEntryToStorage.StoragePendingFilesPaths = null;
         }
+
+        backupEntryToStorage.StorageEnded = DateTime.Now;
+        backupEntryToStorage.BackupState = backupState;
+
+        _backupHistoryService.UpdateBackupHistoryEntry(backupEntryToStorage);
       }
 
-      return true;
-    }
-
-    private void BackupFileOnSaveProgress(object sender, SaveProgressEventArgs saveProgressEventArgs)
-    {
-      if (saveProgressEventArgs.EventType != ZipProgressEventType.Saving_AfterWriteEntry)
-        return;
-
-      var entriesPercent = (float)saveProgressEventArgs.EntriesSaved / saveProgressEventArgs.EntriesTotal;
-
-      if (entriesPercent < _entriesSavedLogPoint)
-        return;
-
-      _log.Info(
-        string.Format(
-          "Compress file progress: {0:N0} of {1:N0} ({2:P}) of {3}.",
-          saveProgressEventArgs.EntriesSaved,
-          saveProgressEventArgs.EntriesTotal,
-          entriesPercent,
-          Path.GetFileName(saveProgressEventArgs.ArchiveName)));
-
-      _entriesSavedLogPoint += 0.1f;
-    }
-
-    private void AddFilesToBackup(
-      ZipFile backupFile,
-      BackupHistoryType backupHistoryType,
-      string pathToBackup,
-      out ICollection<string> backedupFilePaths,
-      out long totalSize)
-    {
-      totalSize = 0;
-      backedupFilePaths = new List<string>();
-
-      var backupPathInfo = new DirectoryInfo(pathToBackup);
-
-      var filesToBackup = backupPathInfo.GetAllFiles().AsEnumerable();
-
-      if (backupHistoryType == BackupHistoryType.Differential)
-      {
-        var latestBackup = _backupHistoryService.GetLatestSuccessfullBackupDate();
-
-        if (!latestBackup.HasValue)
-          throw new Exception("Backup history is empty - could not perform differential backup.");
-
-        filesToBackup =
-          filesToBackup.Where(
-            f => f.LastWriteTime > latestBackup || !_backupHistoryService.IsBackedUp(f.FullName));
-      }
-
-      if (_pathsToExclude.Any())
-        filesToBackup =
-          filesToBackup.Where(
-            f =>
-              !_pathsToExclude.Any(e => f.DirectoryName.StartsWith(e)) &&
-              !_fileTypesToExclude.Contains(f.Extension.TrimStart('.')));
-
-      foreach (var fileToBackup in filesToBackup)
-      {
-        if (fileToBackup.DirectoryName == null)
-          throw new Exception(fileToBackup.FullName + " has no Directory Name.");
-
-        backupFile.AddFile(
-          fileToBackup.FullName, fileToBackup.DirectoryName.Substring(pathToBackup.Length));
-
-        backedupFilePaths.Add(fileToBackup.FullName);
-
-        totalSize += fileToBackup.Length;
-
-        _log.Debug(
-          () =>
-          string.Format(
-            "Adding file to backup: {0} ({1:N0} bytes).",
-            fileToBackup.FullName, fileToBackup.Length));
-      }
+      _log.Debug("Backup storage task ended...");
     }
   }
 }

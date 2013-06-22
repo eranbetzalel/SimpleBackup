@@ -1,21 +1,26 @@
 ﻿using System;
 using System.Collections.Generic;
+using Betzalel.SimpleBackup.Models;
+using Betzalel.SimpleBackup.Types;
 
 namespace Betzalel.SimpleBackup.Services
 {
   public interface IBackupHistoryService
   {
+    bool IsBackedUp(string fullName);
+
     DateTime? GetLatestSuccessfullBackupDate();
     DateTime? GetLatestSuccessfulFullBackupDate();
+    BackupHistoryEntry[] GetBackupEntriesToStorage();
 
-    void AddBackupHistoryEntry(
-      BackupHistoryType backupHistoryType, 
-      DateTime started, 
-      DateTime ended, 
-      TimeSpan? uploadTime, 
-      ICollection<string> backedupFilePaths, BackupResult 
-      backupResult);
+    void AddBackupCompressCompletedEntries(
+      BackupType backupType,
+      DateTime compressStarted,
+      DateTime compressEnded,
+      BackupState backupState,
+      ICollection<string> backedupFilesPaths,
+      ICollection<string> storagePendingFilesPaths);
 
-    bool IsBackedUp(string fullName);
+    void UpdateBackupHistoryEntry(BackupHistoryEntry backupEntryToStorage);
   }
 }

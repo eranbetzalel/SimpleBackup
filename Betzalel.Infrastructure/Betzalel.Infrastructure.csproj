@@ -49,8 +49,12 @@
     <Compile Include="Extensions\XElementExtensions.cs" />
     <Compile Include="Loggers\Log4NetLog.cs" />
     <Compile Include="ISettingsProvider.cs" />
+    <Compile Include="Scheduler\ScheduledTask.cs" />
+    <Compile Include="Scheduler\Scheduler.cs" />
+    <Compile Include="Scheduler\Time.cs" />
     <Compile Include="SettingProviders\AppSettingsProvider.cs" />
     <Compile Include="ILog.cs" />
+    <Compile Include="Scheduler\TaskConcurrencyOptions.cs" />
     <Compile Include="Utilities\PathUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

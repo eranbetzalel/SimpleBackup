@@ -3,5 +3,6 @@
   public interface IBackupService
   {
     void StartBackup();
+    void StopBackup();
   }
 }
