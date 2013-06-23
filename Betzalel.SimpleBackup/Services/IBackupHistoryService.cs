@@ -9,8 +9,8 @@ namespace Betzalel.SimpleBackup.Services
   {
     bool IsBackedUp(string fullName);
 
-    DateTime? GetLatestSuccessfullBackupDate();
-    DateTime? GetLatestSuccessfulFullBackupDate();
+    DateTime? GetLatestSuccessfullBackupCompressDate();
+    DateTime? GetLatestSuccessfulFullBackupCompressDate();
     BackupHistoryEntry[] GetBackupEntriesToStorage();
 
     void AddBackupCompressCompletedEntries(

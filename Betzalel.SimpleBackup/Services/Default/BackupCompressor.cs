@@ -160,7 +160,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     private BackupType GetCurrentBackupType()
     {
-      var latestFullBackup = _backupHistoryService.GetLatestSuccessfulFullBackupDate();
+      var latestFullBackup = _backupHistoryService.GetLatestSuccessfulFullBackupCompressDate();
 
       var minimumDaysBetweenFullBackups =
         _settingsProvider.GetSetting<int>("MinimumDaysBetweenFullBackups");
@@ -307,7 +307,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       if (backupType == BackupType.Differential)
       {
-        var latestBackup = _backupHistoryService.GetLatestSuccessfullBackupDate();
+        var latestBackup = _backupHistoryService.GetLatestSuccessfullBackupCompressDate();
 
         if (!latestBackup.HasValue)
           throw new Exception("Backup history is empty - could not perform differential backup.");

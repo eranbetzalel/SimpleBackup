@@ -48,14 +48,23 @@ namespace Betzalel.SimpleBackup.Services.Default
       _backupLogFileWriter = new StreamWriter(backupLogFileStream, Encoding.UTF8);
     }
 
-    public DateTime? GetLatestSuccessfulFullBackupDate()
+    public DateTime? GetLatestSuccessfullBackupCompressDate()
+    {
+      return
+        _backupHistoryDocument.Value.Root
+          .Elements("Backup")
+          .Where(x => x.NotNullAttribute("state").Value == BackupState.Success.ToString())
+          .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("compressStarted").Value));
+    }
+
+    public DateTime? GetLatestSuccessfulFullBackupCompressDate()
     {
       return
         _backupHistoryDocument.Value.Root
           .Elements("Backup")
           .Where(x =>
             x.NotNullAttribute("type").Value == BackupType.Full.ToString() &&
-            x.NotNullAttribute("state").Value == BackupState.Success.ToString())
+            x.NotNullAttribute("state").Value != BackupState.FileCompressFailed.ToString())
           .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("compressStarted").Value));
     }
 
@@ -69,15 +78,6 @@ namespace Betzalel.SimpleBackup.Services.Default
             x.NotNullAttribute("state").Value == BackupState.StorageFailed.ToString())
           .Select(x => new BackupHistoryEntry(x))
           .ToArray();
-    }
-
-    public DateTime? GetLatestSuccessfullBackupDate()
-    {
-      return
-        _backupHistoryDocument.Value.Root
-          .Elements("Backup")
-          .Where(x => x.NotNullAttribute("state").Value == BackupState.Success.ToString())
-          .Max(x => (DateTime?)DateTime.Parse(x.NotNullAttribute("compressStarted").Value));
     }
 
     public bool IsBackedUp(string fullName)
