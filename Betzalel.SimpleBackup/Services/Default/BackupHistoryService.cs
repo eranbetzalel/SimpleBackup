@@ -11,45 +11,34 @@ using Betzalel.SimpleBackup.Types;
 
 namespace Betzalel.SimpleBackup.Services.Default
 {
-  public class BackupHistoryService : IBackupHistoryService, IDisposable
+  public class BackupHistoryService : IBackupHistoryService
   {
-    private const char BackupLogFileSeperator = '|';
-    private readonly FileStream _backupHistoryFileStream;
+    private const string BackupLogFileSeperator = "|";
+
+    private readonly object _backupLogFileLock;
+    private readonly object _backupHistoryFileLock;
+    private readonly string _backupLogFilePath;
+    private readonly string _backupHistoryFilePath;
     private Lazy<XDocument> _backupHistoryDocument;
     private Lazy<HashSet<string>> _backupLogFileCache;
-    private readonly StreamReader _backupLogFileReader;
-    private readonly StreamWriter _backupLogFileWriter;
 
     public BackupHistoryService(ISettingsProvider settingsProvider)
     {
+      _backupLogFileLock = new object();
+      _backupHistoryFileLock = new object();
+
       InitializeBackupHistoryCache();
       InitializeBackupLogCache();
 
-      var backupHistoryFilePath = settingsProvider.GetSetting<string>("BackupHistoryFile");
-      var backupLogFilePath = settingsProvider.GetSetting<string>("BackupLogFile");
-
-      if (!File.Exists(backupHistoryFilePath))
-      {
-        using (var sw = File.CreateText(backupHistoryFilePath))
-        {
-          var document = new XDocument(new XElement("Backups"));
-
-          document.Save(sw);
-        }
-      }
-
-      _backupHistoryFileStream =
-        File.Open(backupHistoryFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
-
-      var backupLogFileStream =
-        File.Open(backupLogFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
-
-      _backupLogFileReader = new StreamReader(backupLogFileStream, Encoding.UTF8);
-      _backupLogFileWriter = new StreamWriter(backupLogFileStream, Encoding.UTF8);
+      _backupHistoryFilePath = settingsProvider.GetSetting<string>("BackupHistoryFile");
+      _backupLogFilePath = settingsProvider.GetSetting<string>("BackupLogFile");
     }
 
     public DateTime? GetLatestSuccessfullBackupCompressDate()
     {
+      if (_backupHistoryDocument.Value.Root == null)
+        throw new Exception("Root element is missing.");
+
       return
         _backupHistoryDocument.Value.Root
           .Elements("Backup")
@@ -59,6 +48,9 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     public DateTime? GetLatestSuccessfulFullBackupCompressDate()
     {
+      if (_backupHistoryDocument.Value.Root == null)
+        throw new Exception("Root element is missing.");
+
       return
         _backupHistoryDocument.Value.Root
           .Elements("Backup")
@@ -70,19 +62,17 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     public BackupHistoryEntry[] GetBackupEntriesToStorage()
     {
+      if (_backupHistoryDocument.Value.Root == null)
+        throw new Exception("Root element is missing.");
+
       return
         _backupHistoryDocument.Value.Root
           .Elements("Backup")
-          .Where(x => 
+          .Where(x =>
             x.NotNullAttribute("state").Value == BackupState.FileCompressSuccess.ToString() ||
             x.NotNullAttribute("state").Value == BackupState.StorageFailed.ToString())
           .Select(x => new BackupHistoryEntry(x))
           .ToArray();
-    }
-
-    public bool IsBackedUp(string fullName)
-    {
-      return _backupLogFileCache.Value.Contains(fullName);
     }
 
     public void AddBackupCompressCompletedEntries(
@@ -97,58 +87,62 @@ namespace Betzalel.SimpleBackup.Services.Default
         UpdateBackupLog(
           backedupFilePaths, backupType == BackupType.Full);
 
-      var document = _backupHistoryDocument.Value;
+      lock (_backupHistoryFileLock)
+      {
+        var document = _backupHistoryDocument.Value;
 
-      document.Root.Add(
-        new BackupHistoryEntry
-          {
-            Id = GetLastBackupHistoryEntryId() + 1,
-            BackupState = backupState,
-            BackupType = backupType,
-            CompressStarted = compressStarted,
-            CompressEnded = compressEnded,
-            NumberOfBackedupFiles = backedupFilePaths.Count,
-            StoragePendingFilesPaths = storagePendingFilesPaths.ToArray()
-          }.ToXElement());
+        if (document.Root == null)
+          throw new Exception("Root element is missing.");
 
-      _backupHistoryFileStream.SetLength(0);
+        document.Root.Add(
+          new BackupHistoryEntry
+            {
+              Id = GetLastBackupHistoryEntryId() + 1,
+              BackupState = backupState,
+              BackupType = backupType,
+              CompressStarted = compressStarted,
+              CompressEnded = compressEnded,
+              NumberOfBackedupFiles = backedupFilePaths.Count,
+              StoragePendingFilesPaths = storagePendingFilesPaths.ToArray()
+            }.ToXElement());
 
-      document.Save(_backupHistoryFileStream);
+        document.Save(_backupHistoryFilePath);
 
-      InitializeBackupHistoryCache();
+        InitializeBackupHistoryCache();
+      }
     }
 
     public void UpdateBackupHistoryEntry(BackupHistoryEntry backupEntryToStorage)
     {
-      var document = _backupHistoryDocument.Value;
+      lock (_backupHistoryFileLock)
+      {
+        var document = _backupHistoryDocument.Value;
 
-      var oldBackupEntry =
-        document.Root
-          .Elements("Backup")
-          .FirstOrDefault(x => long.Parse(x.NotNullAttribute("id").Value) == backupEntryToStorage.Id);
+        if (document.Root == null)
+          throw new Exception("Root element is missing.");
 
-      if (oldBackupEntry == null)
-        throw new Exception("Could not find backup history entry to update (" + backupEntryToStorage.Id + ").");
+        var oldBackupEntry =
+          document.Root
+            .Elements("Backup")
+            .FirstOrDefault(x => long.Parse(x.NotNullAttribute("id").Value) == backupEntryToStorage.Id);
 
-      oldBackupEntry.ReplaceWith(backupEntryToStorage.ToXElement());
+        if (oldBackupEntry == null)
+          throw new Exception("Could not find backup history entry to update (" + backupEntryToStorage.Id + ").");
 
-      _backupHistoryFileStream.SetLength(0);
+        oldBackupEntry.ReplaceWith(backupEntryToStorage.ToXElement());
 
-      document.Save(_backupHistoryFileStream);
+        document.Save(_backupHistoryFilePath);
 
-      InitializeBackupHistoryCache();
-    }
-
-    public void Dispose()
-    {
-      _backupHistoryFileStream.Dispose();
-      _backupLogFileReader.Dispose();
-      _backupLogFileWriter.Dispose();
+        InitializeBackupHistoryCache();
+      }
     }
 
     private long GetLastBackupHistoryEntryId()
     {
       var document = _backupHistoryDocument.Value;
+
+      if (document.Root == null)
+        throw new Exception("Root element is missing.");
 
       if (!document.Root.Elements("Backup").Any())
         return 0;
@@ -156,44 +150,42 @@ namespace Betzalel.SimpleBackup.Services.Default
       return document.Root.Elements("Backup").Max(x => long.Parse(x.NotNullAttribute("id").Value));
     }
 
+    public bool IsBackedUp(string fullName)
+    {
+      return _backupLogFileCache.Value.Contains(fullName);
+    }
+
     private void UpdateBackupLog(ICollection<string> backedupFilePaths, bool clearLogFile)
     {
-      IEnumerable<string> newBackedupFilePaths = backedupFilePaths;
-
-      var backupLogFileStream = _backupLogFileReader.BaseStream;
-
-      if (clearLogFile)
+      lock (_backupLogFileLock)
       {
-        backupLogFileStream.SetLength(0);
+        using (var backupLogFile = File.Open(_backupLogFilePath, FileMode.OpenOrCreate))
+        {
+          var backupLogFileCache = _backupLogFileCache.Value;
+          var newBackedupFilePaths = backedupFilePaths;
+
+          if (clearLogFile)
+          {
+            backupLogFile.SetLength(0);
+          }
+          else
+          {
+            newBackedupFilePaths = backedupFilePaths.Where(b => !backupLogFileCache.Contains(b)).ToArray();
+
+            if (!newBackedupFilePaths.Any())
+              return;
+          }
+
+          backupLogFile.Seek(0, SeekOrigin.End);
+
+          foreach (var backedupFilePath in newBackedupFilePaths)
+          {
+            backupLogFile.Write(backedupFilePath + BackupLogFileSeperator, Encoding.UTF8);
+          }
+        }
+
+        InitializeBackupLogCache();
       }
-      else if (!_backupLogFileReader.EndOfStream)
-      {
-        backupLogFileStream.Seek(0, SeekOrigin.Begin);
-
-        var loggedFilePaths = _backupLogFileCache.Value;
-
-        newBackedupFilePaths = backedupFilePaths.Where(b => !loggedFilePaths.Contains(b));
-      }
-
-      backupLogFileStream.Seek(0, SeekOrigin.End);
-
-      if (!newBackedupFilePaths.Any())
-        return;
-
-      if (!_backupLogFileCache.Value.IsEmpty())
-        _backupLogFileWriter.Write(BackupLogFileSeperator);
-
-      foreach (var backedupFilePath in newBackedupFilePaths)
-      {
-        _backupLogFileWriter.Write(backedupFilePath + BackupLogFileSeperator);
-      }
-
-      _backupLogFileWriter.Flush();
-
-      //  Removes the last seperator
-      backupLogFileStream.SetLength(backupLogFileStream.Length - 1);
-
-      InitializeBackupLogCache();
     }
 
     private void InitializeBackupHistoryCache()
@@ -201,21 +193,36 @@ namespace Betzalel.SimpleBackup.Services.Default
       _backupHistoryDocument = new Lazy<XDocument>(LoadBackupHistoryFile);
     }
 
-    private HashSet<string> LoadHistoryLogFile()
+    private XDocument LoadBackupHistoryFile()
     {
-      return new HashSet<string>(_backupLogFileReader.ReadToEnd().Split(BackupLogFileSeperator));
+      if (!File.Exists(_backupHistoryFilePath))
+      {
+        using (var sw = File.CreateText(_backupHistoryFilePath))
+        {
+          var document = new XDocument(new XElement("Backups"));
+
+          document.Save(sw);
+        }
+      }
+
+      return XDocument.Load(_backupHistoryFilePath);
     }
 
     private void InitializeBackupLogCache()
     {
-      _backupLogFileCache = new Lazy<HashSet<string>>(LoadHistoryLogFile);
+      _backupLogFileCache = new Lazy<HashSet<string>>(LoadBackupLogFile);
     }
 
-    private XDocument LoadBackupHistoryFile()
+    private HashSet<string> LoadBackupLogFile()
     {
-      _backupHistoryFileStream.Seek(0, SeekOrigin.Begin);
-
-      return XDocument.Load(_backupHistoryFileStream);
+      using (var backupLogFileReader = File.OpenText(_backupLogFilePath))
+      {
+        return
+          new HashSet<string>(
+            backupLogFileReader
+              .ReadToEnd()
+              .Split(new[] { BackupLogFileSeperator }, StringSplitOptions.RemoveEmptyEntries));
+      }
     }
   }
 }

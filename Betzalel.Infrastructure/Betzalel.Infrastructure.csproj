@@ -46,6 +46,7 @@
   <ItemGroup>
     <Compile Include="Extensions\DirectoryInfoExtensions.cs" />
     <Compile Include="Extensions\EnumerableExtensions.cs" />
+    <Compile Include="Extensions\FileStreamExtensions.cs" />
     <Compile Include="Extensions\XElementExtensions.cs" />
     <Compile Include="Loggers\Log4NetLog.cs" />
     <Compile Include="ISettingsProvider.cs" />
