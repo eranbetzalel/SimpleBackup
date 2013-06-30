@@ -159,9 +159,10 @@ namespace Betzalel.SimpleBackup.Services.Default
     {
       lock (_backupLogFileLock)
       {
+        var backupLogFileCache = _backupLogFileCache.Value;
+
         using (var backupLogFile = File.Open(_backupLogFilePath, FileMode.OpenOrCreate))
         {
-          var backupLogFileCache = _backupLogFileCache.Value;
           var newBackedupFilePaths = backedupFilePaths;
 
           if (clearLogFile)
