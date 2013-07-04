@@ -66,7 +66,7 @@ namespace Betzalel.SimpleBackup.Services.Default
     }
 
     public bool CreateBackupFiles(
-      out BackupType backupType, 
+      out BackupType backupType,
       out List<string> backedupFilePaths,
       out List<string> storagePendingFilesPaths)
     {
@@ -226,7 +226,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
             if (currentBackupPathBackedupFilePaths.Count == 0)
             {
-              _log.Info("No files needed to backup.");
+              _log.Info(string.Format("No files needed to backup for {0}.", pathToBackup));
 
               continue;
             }

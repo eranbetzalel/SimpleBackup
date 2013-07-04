@@ -83,6 +83,14 @@ namespace Betzalel.SimpleBackup.Services.Default
       ICollection<string> backedupFilePaths,
       ICollection<string> storagePendingFilesPaths)
     {
+      if (backedupFilePaths.Count <= 0)
+        throw new ArgumentOutOfRangeException(
+          "backedupFilePaths", backedupFilePaths.Count, "Should be more than zero.");
+
+      if (storagePendingFilesPaths.Count <= 0)
+        throw new ArgumentOutOfRangeException(
+          "storagePendingFilesPaths", storagePendingFilesPaths.Count, "Should be more than zero.");
+
       if (backupState == BackupState.FileCompressSuccess)
         UpdateBackupLog(
           backedupFilePaths, backupType == BackupType.Full);
@@ -197,14 +205,7 @@ namespace Betzalel.SimpleBackup.Services.Default
     private XDocument LoadBackupHistoryFile()
     {
       if (!File.Exists(_backupHistoryFilePath))
-      {
-        using (var sw = File.CreateText(_backupHistoryFilePath))
-        {
-          var document = new XDocument(new XElement("Backups"));
-
-          document.Save(sw);
-        }
-      }
+        return new XDocument(new XElement("Backups"));
 
       return XDocument.Load(_backupHistoryFilePath);
     }
@@ -216,6 +217,9 @@ namespace Betzalel.SimpleBackup.Services.Default
 
     private HashSet<string> LoadBackupLogFile()
     {
+      if (!File.Exists(_backupLogFilePath))
+        return new HashSet<string>();
+
       using (var backupLogFileReader = File.OpenText(_backupLogFilePath))
       {
         return

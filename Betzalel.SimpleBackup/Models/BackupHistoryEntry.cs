@@ -12,7 +12,7 @@ namespace Betzalel.SimpleBackup.Models
     public BackupType BackupType { get; set; }
     public DateTime CompressStarted { get; set; }
     public DateTime CompressEnded { get; set; }
-    public DateTime StorageStarted { get; set; }
+    public int TotalStorageTime { get; set; }
     public DateTime StorageEnded { get; set; }
     public long NumberOfBackedupFiles { get; set; }
     public BackupState BackupState { get; set; }
@@ -28,7 +28,7 @@ namespace Betzalel.SimpleBackup.Models
       BackupType = (BackupType)Enum.Parse(typeof(BackupType), element.NotNullAttribute("type").Value);
       CompressStarted = DateTime.Parse(element.NotNullAttribute("compressStarted").Value);
       CompressEnded = DateTime.Parse(element.NotNullAttribute("compressEnded").Value);
-      StorageStarted = DateTime.Parse(element.NotNullAttribute("storageStarted").Value);
+      TotalStorageTime = int.Parse(element.NotNullAttribute("totalStorageTime").Value);
       StorageEnded = DateTime.Parse(element.NotNullAttribute("storageEnded").Value);
       NumberOfBackedupFiles = long.Parse(element.NotNullAttribute("numberOfBackedupFiles").Value);
       BackupState = (BackupState)Enum.Parse(typeof(BackupState), element.NotNullAttribute("state").Value);
@@ -59,7 +59,7 @@ namespace Betzalel.SimpleBackup.Models
         new XAttribute("type", BackupType.ToString()),
         new XAttribute("compressStarted", CompressStarted.ToString()),
         new XAttribute("compressEnded", CompressEnded.ToString()),
-        new XAttribute("storageStarted", StorageStarted.ToString()),
+        new XAttribute("totalStorageTime", TotalStorageTime.ToString()),
         new XAttribute("storageEnded", StorageEnded.ToString()),
         new XAttribute("numberOfBackedupFiles", NumberOfBackedupFiles.ToString()),
         new XAttribute("state", BackupState.ToString()),

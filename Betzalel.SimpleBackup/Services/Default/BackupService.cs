@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Betzalel.Infrastructure;
 using Betzalel.Infrastructure.Scheduler;
 using Betzalel.SimpleBackup.Types;
@@ -70,13 +71,20 @@ namespace Betzalel.SimpleBackup.Services.Default
       if (!_backupCompressor.CreateBackupFiles(out backupType, out backedupFilePaths, out storagePendingFilesPaths))
         backupState = BackupState.FileCompressFailed;
 
-      _backupHistoryService.AddBackupCompressCompletedEntries(
-        backupType,
-        compressStarted,
-        DateTime.Now,
-        backupState,
-        backedupFilePaths,
-        storagePendingFilesPaths);
+      if (backedupFilePaths.Count <= 0 || storagePendingFilesPaths.Count <= 0)
+      {
+        _log.Info("No files were backed up.");
+      }
+      else
+      {
+        _backupHistoryService.AddBackupCompressCompletedEntries(
+          backupType,
+          compressStarted,
+          DateTime.Now,
+          backupState,
+          backedupFilePaths,
+          storagePendingFilesPaths);
+      }
 
       _log.Debug("Backup compress task ended...");
     }
@@ -93,7 +101,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
         var backupState = BackupState.Success;
 
-        backupEntryToStorage.StorageStarted = DateTime.Now;
+        var storageTime = Stopwatch.StartNew();
 
         if (!_backupStorageService.ProcessStorageReadyBackupEntry(backupEntryToStorage))
         {
@@ -102,9 +110,10 @@ namespace Betzalel.SimpleBackup.Services.Default
         else
         {
           backupEntryToStorage.StoragePendingFilesPaths = null;
+          backupEntryToStorage.StorageEnded = DateTime.Now;
         }
 
-        backupEntryToStorage.StorageEnded = DateTime.Now;
+        backupEntryToStorage.TotalStorageTime += (int) Math.Round(storageTime.Elapsed.TotalSeconds);
         backupEntryToStorage.BackupState = backupState;
 
         _backupHistoryService.UpdateBackupHistoryEntry(backupEntryToStorage);
