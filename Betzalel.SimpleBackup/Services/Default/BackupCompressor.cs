@@ -163,10 +163,11 @@ namespace Betzalel.SimpleBackup.Services.Default
       var latestFullBackup = _backupHistoryService.GetLatestSuccessfulFullBackupCompressDate();
 
       var minimumDaysBetweenFullBackups =
-        _settingsProvider.GetSetting<int>("MinimumDaysBetweenFullBackups");
+        _settingsProvider.GetSettingOrDefault("MinimumDaysBetweenFullBackups", -1);
 
       if (!latestFullBackup.HasValue ||
-          latestFullBackup.Value.AddDays(minimumDaysBetweenFullBackups) <= DateTime.Now)
+        (minimumDaysBetweenFullBackups >= 0 &&
+        latestFullBackup.Value.AddDays(minimumDaysBetweenFullBackups) <= DateTime.Now))
       {
         return BackupType.Full;
       }

@@ -30,5 +30,15 @@ namespace Betzalel.SimpleBackup
 
       return base.GetSetting<T>(settingName);
     }
+
+    public override T GetSettingOrDefault<T>(string settingName, T defaultValue)
+    {
+      string customValue;
+
+      if (_backupConfiguration.TryGetValue(settingName, out customValue))
+        return (T)Convert.ChangeType(customValue.Trim(), typeof(T));
+
+      return base.GetSettingOrDefault(settingName, defaultValue);
+    }
   }
 }
