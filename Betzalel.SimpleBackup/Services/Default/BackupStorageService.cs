@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.FtpClient;
 using Betzalel.Infrastructure;
+using Betzalel.Infrastructure.Extensions;
 using Betzalel.SimpleBackup.Models;
 
 namespace Betzalel.SimpleBackup.Services.Default
@@ -12,11 +13,19 @@ namespace Betzalel.SimpleBackup.Services.Default
   {
     private readonly ILog _log;
     private readonly ISettingsProvider _settingsProvider;
+    private readonly FtpDataConnectionType _dataConnectionType;
 
     public BackupStorageService(ILog log, ISettingsProvider settingsProvider)
     {
       _log = log;
       _settingsProvider = settingsProvider;
+
+      var ftpDataConnectionTypeName = _settingsProvider.GetSetting<string>("FtpDataConnectionType");
+
+      if (!Enum.TryParse(ftpDataConnectionTypeName, out _dataConnectionType))
+        throw new Exception(
+          "FtpDataConnectionType value is invalid. Please use one of the following values: " +
+          Enum.GetNames(typeof(FtpDataConnectionType)).OrderBy(x => x).ToStringList() + ".");
     }
 
     public bool ProcessStorageReadyBackupEntry(BackupHistoryEntry backupEntryToStorage)
@@ -35,7 +44,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
         using (var ftpClient = new FtpClient())
         {
-          ftpClient.DataConnectionType = FtpDataConnectionType.AutoActive;
+          ftpClient.DataConnectionType = _dataConnectionType;
 
           ftpClient.Host = _settingsProvider.GetSetting<string>("FtpHost");
           ftpClient.Port = _settingsProvider.GetSetting<int>("FtpPort");
@@ -92,7 +101,7 @@ namespace Betzalel.SimpleBackup.Services.Default
 
       var ftpBackupFilePath = ftpBackupPath + "/" + backupFilename;
 
-      if(ftpClient.FileExists(ftpBackupFilePath))
+      if (ftpClient.FileExists(ftpBackupFilePath))
       {
         var ftpBackupFileSize = ftpClient.GetFileSize(ftpBackupFilePath);
 

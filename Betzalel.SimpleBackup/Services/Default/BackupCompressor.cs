@@ -193,6 +193,9 @@ namespace Betzalel.SimpleBackup.Services.Default
           {
             _log.Debug("Adding directory to backup " + pathToBackup + " directory...");
 
+            backupFile.Comment =
+              string.Format("Backup of path: {0}.\r\n\r\nCreated by Simple Backup (c).", pathToBackup);
+
             backupFile.CompressionMethod = CompressionMethod.BZip2;
             backupFile.CompressionLevel = CompressionLevel.BestCompression;
             backupFile.ZipErrorAction = ZipErrorAction.Skip;
